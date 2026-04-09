@@ -3,209 +3,282 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Assembly Logic Othello - GitHub Edition</title>
+    <title>TAIWAN 1980 復刻版 - 黑白棋 (含 AI)</title>
     <style>
+        :root {
+            --bg-color: #1a1a1a;
+            --board-color: #27ae60; /* 經典棋盤綠 */
+            --text-color: #00ff41;  /* 復古終端機綠 */
+        }
         body {
+            /* 修復了原本 flexùng-direction 的錯字 */
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            height: 100vh;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: 'Courier New', Courier, monospace;
+            min-height: 100vh;
             margin: 0;
-            background-color: #2c3e50;
-            color: white;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
         }
-        canvas {
-            border: 5px solid #34495e;
-            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+        h1 { margin-bottom: 5px; text-shadow: 0 0 5px var(--text-color); }
+        #status { font-size: 1.2rem; margin-bottom: 15px; height: 1.5rem; }
+        
+        /* 棋盤樣式 */
+        #board {
+            display: grid;
+            grid-template-columns: repeat(8, 50px);
+            grid-template-rows: repeat(8, 50px);
+            gap: 2px;
+            background-color: #111;
+            padding: 6px;
+            border: 4px solid #444;
+            border-radius: 4px;
+            box-shadow: 0 0 15px rgba(0,255,65,0.2);
+        }
+        .cell {
+            width: 50px;
+            height: 50px;
+            background-color: var(--board-color);
+            display: flex;
+            align-items: center;
+            justify-content: center;
             cursor: pointer;
+            transition: background 0.2s;
         }
-        .info {
-            margin-bottom: 20px;
-            text-align: center;
+        .cell:hover { background-color: #2ecc71; }
+        
+        /* 棋子樣式 */
+        .piece {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: none;
+            transition: transform 0.3s;
         }
-        .controls {
-            margin-top: 20px;
-        }
+        .black { background-color: #000; display: block; box-shadow: inset -3px -3px 6px rgba(255,255,255,0.2), 2px 2px 4px rgba(0,0,0,0.5); }
+        .white { background-color: #fff; display: block; box-shadow: inset -3px -3px 6px rgba(0,0,0,0.2), 2px 2px 4px rgba(0,0,0,0.5); }
+        
         button {
+            margin-top: 20px;
             padding: 10px 20px;
-            font-size: 16px;
+            background: transparent;
+            border: 1px solid var(--text-color);
+            color: var(--text-color);
             cursor: pointer;
-            background-color: #27ae60;
-            color: white;
-            border: none;
-            border-radius: 5px;
+            font-family: inherit;
+            font-size: 1rem;
+            transition: all 0.2s;
         }
-        button:hover { background-color: #2ecc71; }
+        button:hover { background: var(--text-color); color: #000; }
     </style>
 </head>
 <body>
 
-    <div class="info">
-        <h1>Black & White Othello</h1>
-        <p id="status">回合: <span style="color: #000;">黑棋 (Black)</span></p>
-        <h2 id="score">黑: 2 | 白: 2</h2>
-    </div>
-
-    <canvas id="gameCanvas" width="400" height="400"></canvas>
-
-    <div class="controls">
-        <button onclick="resetGame()">重新開始 (Reset SUB_182)</button>
-    </div>
+    <h1>TAIWAN.ASM (1980)</h1>
+    <div id="status">準備開始...</div>
+    <div id="board"></div>
+    <button onclick="resetGame()">重新開始 (RESET)</button>
 
     <script>
-        /**
-         * 邏輯說明：
-         * 此程式碼模仿了您提供的 Assembly 結構。
-         * SUB_40 相當於 Canvas 的渲染循環 (Render Loop)。
-         * SUB_141 相當於繪製單一棋子的指令 (Draw Piece Function)。
-         */
-
-        const canvas = document.getElementById('gameCanvas');
-        const ctx = canvas.getContext('2d');
-        const statusText = document.getElementById('status');
-        const scoreText = document.getElementById('score');
-
-        const SIZE = 8;
-        const CELL_SIZE = canvas >> 1; // 這裡模擬位址計算
         let board = [];
-        let currentPlayer = 1; // 1: Black, 2: White
+        let currentPlayer = 1; // 1: 玩家(黑), 2: 電腦(白)
+        let isThinking = false; // 防止玩家在電腦思考時連點
 
-        // 初始化棋盤 (模仿 DATA_145/142/144 的重置邏輯)
-        function resetGame() {
-            board = Array(SIZE).fill().map(() => Array(SIZE).fill(0));
+        // 模擬 1980 年代 AI 的位置權重表 (角落最高分，星位負分)
+        const weights = [
+            [100, -20,  10,   5,   5,  10, -20, 100],
+            [-20, -50,  -2,  -2,  -2,  -2, -50, -20],
+            [ 10,  -2,   5,   1,   1,   5,  -2,  10],
+            [  5,  -2,   1,   1,   1,   1,  -2,   5],
+            [  5,  -2,   1,   1,   1,   1,  -2,   5],
+            [ 10,  -2,   5,   1,   1,   5,  -2,  10],
+            [-20, -50,  -2,  -2,  -2,  -2, -50, -20],
+            [100, -20,  10,   5,   5,  10, -20, 100]
+        ];
+
+        function init() {
+            const boardEl = document.getElementById('board');
+            boardEl.innerHTML = '';
+            board = Array(8).fill().map(() => Array(8).fill(0));
             
-            // 初始位置 (如同 Assembly 中的定點放置指令)
-            board[3][3] = 2;
-            board[3][4] = 1;
-            board[4][3] = 1;
-            board[4][4] = 2;
+            // 建立 8x8 格子
+            for (let r = 0; r < 8; r++) {
+                for (let c = 0; c < 8; c++) {
+                    const cell = document.createElement('div');
+                    cell.className = 'cell';
+                    cell.onclick = () => playerMove(r, c);
+                    const piece = document.createElement('div');
+                    piece.id = `cell-${r}-${c}`;
+                    piece.className = 'piece';
+                    cell.appendChild(piece);
+                    boardEl.appendChild(cell);
+                }
+            }
+
+            // 黑白棋初始配置 (中間四格)
+            board[3][3] = 2; board[3][4] = 1;
+            board[4][3] = 1; board[4][4] = 2;
             
             currentPlayer = 1;
-            updateUI();
+            isThinking = false;
             render();
         }
 
-        // 繪圖引擎 (模仿 SUB_40 的循環)
-        function render() {
-            // 清除畫布
-            ctx.fillStyle = '#2e7d32'; // 棋盤綠色
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
+        // 核心邏輯：取得某個位置下子後，可以翻轉的所有對手棋子座標
+        // 修復了原本無窮迴圈與索引錯誤的問題
+        function getFlippedPieces(r, c, player) {
+            if (board[r][c] !== 0) return []; // 該位置必須是空的
+            
+            let opponent = 3 - player;
+            let flips = [];
+            const dirs = [[-1,-1], [-1,0], [-1,1], [0,-1], [0,1], [1,-1], [1,0], [1,1]]; // 八個方向
 
-            // 繪製格線 (模仿 SUB_141 的座標循環)
-            ctx.strokeStyle = '#1b5e20';
-            for (let i = 0; i <= SIZE; i++) {
-                ctx.beginPath();
-                ctx.moveTo(i * 50, 0); ctx.lineTo(i * 50, 400);
-                ctx.stroke();
-                ctx.beginPath();
-                ctx.moveTo(0, i * 50); ctx.lineTo(400, i * 50);
-                ctx.stroke();
-            }
-
-            // 繪製棋子 (模擬 Assembly 中的 DI/AX 指令序列)
-            for (let r = 0; r < SIZE; r++) {
-                for (let c = 0; c < SIZE; c++) {
-                    if (board[r][c] !== 0) {
-                        drawPiece(r, c, board[r][c]);
-                    }
-                }
-            }
-        }
-
-        // 單一繪圖指令 (模擬 SUB_141)
-        function drawPiece(r, c, player) {
-            const x = c * 50 + 25;
-            const y = r * 50 + 25;
-            ctx.beginPath();
-            ctx.arc(x, y, 20, 0, Math.PI * 2);
-            ctx.fillStyle = (player === 1) ? '#000000' : '#ffffff';
-            ctx.fill();
-            ctx.strokeStyle = '#333';
-            ctx.stroke();
-        }
-
-        // 核心遊戲邏輯: 檢查合法性與翻轉 (這部分是 Assembly 中未顯示但必需的邏輯)
-        function handleMove(r, c) {
-            if (board[r][c] !== 0) return;
-
-            const flips = getFlips(r, c, currentPlayer);
-            if (flips.length > 0) {
-                board[r][c] = currentPlayer;
-                flips.forEach(pos => board[pos.r][pos.c] = currentPlayer);
+            for (let [dr, dc] of dirs) {
+                let temp = [];
+                let nr = r + dr;
+                let nc = c + dc;
                 
-                currentPlayer = (currentPlayer === 1) ? 2 : 1;
-                // 檢查下家是否有棋可走，若無則跳過回合
-                if (!hasValidMove(currentPlayer)) {
-                    currentPlayer = (currentPlayer === 1) ? 2 : 1;
-                    if (!hasValidMove(currentPlayer)) {
-                        alert("遊戲結束!");
+                // 步驟一：一直往前找，只要是對手就記錄下來 (修復：正確更新 nr, nc)
+                while (nr >= 0 && nr < 8 && nc >= 0 && nc < 8 && board[nr][nc] === opponent) {
+                    temp.push([nr, nc]);
+                    nr += dr;
+                    nc += dc;
+                }
+                
+                // 步驟二：如果最後碰到的是自己的棋子，代表成功「夾擊」
+                if (nr >= 0 && nr < 8 && nc >= 0 && nc < 8 && board[nr][nc] === player) {
+                    flips = flips.concat(temp); // 把這方向找到的對手棋子加入總清單
+                }
+            }
+            return flips; // 回傳所有可翻轉的座標 (若為空陣列代表不合法)
+        }
+
+        // 玩家下子
+        function playerMove(r, c) {
+            if (currentPlayer !== 1 || isThinking) return;
+
+            const flips = getFlippedPieces(r, c, 1);
+            if (flips.length === 0) return; // 如果無法翻轉任何棋子，代表不合法，直接返回
+
+            // 執行下子與翻轉
+            board[r][c] = 1;
+            flips.forEach(([fr, fc]) => board[fr][fc] = 1);
+            
+            currentPlayer = 2;
+            render();
+
+            // 檢查流程並切換給電腦
+            checkNextTurn();
+        }
+
+        // 電腦 AI 下子
+        function cpuMove() {
+            let bestScore = -Infinity;
+            let bestMove = null;
+            let bestFlips = [];
+
+            // 掃描棋盤，找出得分最高的一步
+            for (let r = 0; r < 8; r++) {
+                for (let c = 0; c < 8; c++) {
+                    const flips = getFlippedPieces(r, c, 2);
+                    if (flips.length > 0) {
+                        // 評分公式 = 翻轉數量 + 該位置的戰略權重
+                        let score = flips.length + weights[r][c];
+                        if (score > bestScore) {
+                            bestScore = score;
+                            bestMove = { r, c };
+                            bestFlips = flips;
+                        }
                     }
                 }
-                updateUI();
-                render();
+            }
+
+            if (bestMove) {
+                board[bestMove.r][bestMove.c] = 2;
+                bestFlips.forEach(([fr, fc]) => board[fr][fc] = 2);
+            }
+
+            currentPlayer = 1;
+            isThinking = false;
+            render();
+
+            // 檢查流程並切換給玩家
+            checkNextTurn();
+        }
+
+        // 檢查雙方是否還有合法步可走 (Pass 機制)
+        function checkNextTurn() {
+            if (!hasValidMove(currentPlayer)) {
+                let opponent = 3 - currentPlayer;
+                if (!hasValidMove(opponent)) {
+                    // 雙方都沒步可走，遊戲結束
+                    setTimeout(showGameOver, 100);
+                } else {
+                    // 目前玩家 PASS
+                    const passMsg = currentPlayer === 1 ? "您無步可走，PASS！" : "電腦無步可走，PASS！";
+                    setTimeout(() => {
+                        alert(passMsg);
+                        currentPlayer = opponent;
+                        render();
+                        if (currentPlayer === 2) {
+                            isThinking = true;
+                            setTimeout(cpuMove, 600);
+                        }
+                    }, 100);
+                }
+            } else if (currentPlayer === 2) {
+                // 輪到電腦且有步可走
+                isThinking = true;
+                setTimeout(cpuMove, 600);
             }
         }
 
-        function getFlips(r, c, player) {
-            const directions = [[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]];
-            let allFlips = [];
-            const opponent = (player === 1) ? 2 : 1;
-
-            directions.forEach(([dr, dc]) => {
-                let tempFlips = [];
-                let currR = r + dr;
-                let currC = c + dc;
-
-                while (currR >= 0 && currR < SIZE && currC >= 0 && currC < SIZE && board[currR][currC] === opponent) {
-                    tempFlips.push({r: currR, c: currC});
-                    currR += dr;
-                    currC += dc;
-                }
-
-                if (currR >= 0 && currR < SIZE && currC >= 0 && currC < SIZE && board[currR][currC] === player) {
-                    allFlips = allFlips.concat(tempFlips);
-                }
-            });
-            return allFlips;
-        }
-
+        // 檢查特定玩家是否有任何合法的落子點
         function hasValidMove(player) {
-            for (let r = 0; r < SIZE; r++) {
-                for (let c = 0; c < SIZE; c++) {
-                    if (board[r][c] === 0 && getFlips(r, c, player).length > 0) return true;
+            for (let r = 0; r < 8; r++) {
+                for (let c = 0; c < 8; c++) {
+                    if (getFlippedPieces(r, c, player).length > 0) return true;
                 }
             }
             return false;
         }
 
-        function updateUI() {
-            let black = 0, white = 0;
-            board.forEach(row => row.forEach(cell => {
-                if (cell === 1) black++;
-                if (else if (cell === 2) white++; // 注意：這裡僅為邏輯示意，實際代碼如下
-            }));
-            // 修正計算
-            black = board.flat().filter(x => x===1).length;
-            white = board.flat().filter(x => x===2).length;
-
-            statusText.innerHTML = `回合: <span style="color: ${currentPlayer === 1 ? '#fff' : '#000'}; text-shadow: 1px 1px #000;">${currentPlayer === 1 ? '黑棋 (Black)' : '白棋 (White)'}</span>`;
-            scoreText.innerText = `黑: ${black} | 白: ${white}`;
+        // 更新畫面
+        function render() {
+            let bCount = 0, wCount = 0;
+            for (let r = 0; r < 8; r++) {
+                for (let c = 0; c < 8; c++) {
+                    const el = document.getElementById(`cell-${r}-${c}`);
+                    el.className = 'piece' + (board[r][c] === 1 ? ' black' : board[r][c] === 2 ? ' white' : '');
+                    if (board[r][c] === 1) bCount++;
+                    if (board[r][c] === 2) wCount++;
+                }
+            }
+            
+            const turnText = currentPlayer === 1 ? "玩家 (黑) 回合" : "電腦思考中...";
+            document.getElementById('status').innerText = `黑: ${bCount} | 白: ${wCount} - ${turnText}`;
         }
 
-        canvas.addEventListener('click', (e) => {
-            const rect = canvas.getBoundingClientRect();
-            const x = e.clientX - rect.left;
-            const y = e.clientY - rect.top;
-            const c = Math.floor(x / 50);
-            const r = Math.floor(y / 50);
-            handleMove(r, c);
-        });
+        // 遊戲結束判定
+        function showGameOver() {
+            let bCount = 0, wCount = 0;
+            board.flat().forEach(val => {
+                if (val === 1) bCount++;
+                if (val === 2) wCount++;
+            });
+            
+            let result = bCount > wCount ? "恭喜，您贏了！" : (wCount > bCount ? "電腦獲勝！" : "平手！");
+            document.getElementById('status').innerText = `遊戲結束！ ${result} (黑:${bCount} 白:${wCount})`;
+        }
 
-        // 啟動遊戲 (模擬 SUB_182 的入口)
-        resetGame();
+        function resetGame() {
+            init();
+        }
 
+        // 啟動遊戲
+        init();
     </script>
 </body>
 </html>
