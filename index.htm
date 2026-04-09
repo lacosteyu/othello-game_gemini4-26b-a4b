@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Assembly Logic Othello - GitHub Edition</title>
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #2c3e50;
+            color: white;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        canvas {
+            border: 5px solid #34495e;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+            cursor: pointer;
+        }
+        .info {
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        .controls {
+            margin-top: 20px;
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            background-color: #27ae60;
+            color: white;
+            border: none;
+            border-radius: 5px;
+        }
+        button:hover { background-color: #2ecc71; }
+    </style>
+</head>
+<body>
+
+    <div class="info">
+        <h1>Black & White Othello</h1>
+        <p id="status">回合: <span style="color: #000;">黑棋 (Black)</span></p>
+        <h2 id="score">黑: 2 | 白: 2</h2>
+    </div>
+
+    <canvas id="gameCanvas" width="400" height="400"></canvas>
+
+    <div class="controls">
+        <button onclick="resetGame()">重新開始 (Reset SUB_182)</button>
+    </div>
+
+    <script>
+        /**
+         * 邏輯說明：
+         * 此程式碼模仿了您提供的 Assembly 結構。
+         * SUB_40 相當於 Canvas 的渲染循環 (Render Loop)。
+         * SUB_141 相當於繪製單一棋子的指令 (Draw Piece Function)。
+         */
+
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const statusText = document.getElementById('status');
+        const scoreText = document.getElementById('score');
+
+        const SIZE = 8;
+        const CELL_SIZE = canvas >> 1; // 這裡模擬位址計算
+        let board = [];
+        let currentPlayer = 1; // 1: Black, 2: White
+
+        // 初始化棋盤 (模仿 DATA_145/142/144 的重置邏輯)
+        function resetGame() {
+            board = Array(SIZE).fill().map(() => Array(SIZE).fill(0));
+            
+            // 初始位置 (如同 Assembly 中的定點放置指令)
+            board[3][3] = 2;
+            board[3][4] = 1;
+            board[4][3] = 1;
+            board[4][4] = 2;
+            
+            currentPlayer = 1;
+            updateUI();
+            render();
+        }
+
+        // 繪圖引擎 (模仿 SUB_40 的循環)
+        function render() {
+            // 清除畫布
+            ctx.fillStyle = '#2e7d32'; // 棋盤綠色
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // 繪製格線 (模仿 SUB_141 的座標循環)
+            ctx.strokeStyle = '#1b5e20';
+            for (let i = 0; i <= SIZE; i++) {
+                ctx.beginPath();
+                ctx.moveTo(i * 50, 0); ctx.lineTo(i * 50, 400);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(0, i * 50); ctx.lineTo(400, i * 50);
+                ctx.stroke();
+            }
+
+            // 繪製棋子 (模擬 Assembly 中的 DI/AX 指令序列)
+            for (let r = 0; r < SIZE; r++) {
+                for (let c = 0; c < SIZE; c++) {
+                    if (board[r][c] !== 0) {
+                        drawPiece(r, c, board[r][c]);
+                    }
+                }
+            }
+        }
+
+        // 單一繪圖指令 (模擬 SUB_141)
+        function drawPiece(r, c, player) {
+            const x = c * 50 + 25;
+            const y = r * 50 + 25;
+            ctx.beginPath();
+            ctx.arc(x, y, 20, 0, Math.PI * 2);
+            ctx.fillStyle = (player === 1) ? '#000000' : '#ffffff';
+            ctx.fill();
+            ctx.strokeStyle = '#333';
+            ctx.stroke();
+        }
+
+        // 核心遊戲邏輯: 檢查合法性與翻轉 (這部分是 Assembly 中未顯示但必需的邏輯)
+        function handleMove(r, c) {
+            if (board[r][c] !== 0) return;
+
+            const flips = getFlips(r, c, currentPlayer);
+            if (flips.length > 0) {
+                board[r][c] = currentPlayer;
+                flips.forEach(pos => board[pos.r][pos.c] = currentPlayer);
+                
+                currentPlayer = (currentPlayer === 1) ? 2 : 1;
+                // 檢查下家是否有棋可走，若無則跳過回合
+                if (!hasValidMove(currentPlayer)) {
+                    currentPlayer = (currentPlayer === 1) ? 2 : 1;
+                    if (!hasValidMove(currentPlayer)) {
+                        alert("遊戲結束!");
+                    }
+                }
+                updateUI();
+                render();
+            }
+        }
+
+        function getFlips(r, c, player) {
+            const directions = [[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]];
+            let allFlips = [];
+            const opponent = (player === 1) ? 2 : 1;
+
+            directions.forEach(([dr, dc]) => {
+                let tempFlips = [];
+                let currR = r + dr;
+                let currC = c + dc;
+
+                while (currR >= 0 && currR < SIZE && currC >= 0 && currC < SIZE && board[currR][currC] === opponent) {
+                    tempFlips.push({r: currR, c: currC});
+                    currR += dr;
+                    currC += dc;
+                }
+
+                if (currR >= 0 && currR < SIZE && currC >= 0 && currC < SIZE && board[currR][currC] === player) {
+                    allFlips = allFlips.concat(tempFlips);
+                }
+            });
+            return allFlips;
+        }
+
+        function hasValidMove(player) {
+            for (let r = 0; r < SIZE; r++) {
+                for (let c = 0; c < SIZE; c++) {
+                    if (board[r][c] === 0 && getFlips(r, c, player).length > 0) return true;
+                }
+            }
+            return false;
+        }
+
+        function updateUI() {
+            let black = 0, white = 0;
+            board.forEach(row => row.forEach(cell => {
+                if (cell === 1) black++;
+                if (else if (cell === 2) white++; // 注意：這裡僅為邏輯示意，實際代碼如下
+            }));
+            // 修正計算
+            black = board.flat().filter(x => x===1).length;
+            white = board.flat().filter(x => x===2).length;
+
+            statusText.innerHTML = `回合: <span style="color: ${currentPlayer === 1 ? '#fff' : '#000'}; text-shadow: 1px 1px #000;">${currentPlayer === 1 ? '黑棋 (Black)' : '白棋 (White)'}</span>`;
+            scoreText.innerText = `黑: ${black} | 白: ${white}`;
+        }
+
+        canvas.addEventListener('click', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            const c = Math.floor(x / 50);
+            const r = Math.floor(y / 50);
+            handleMove(r, c);
+        });
+
+        // 啟動遊戲 (模擬 SUB_182 的入口)
+        resetGame();
+
+    </script>
+</body>
+</html>
